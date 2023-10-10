@@ -34,19 +34,30 @@ def collect_image_paths(data_dir):
 
     dir_filter = futil.DataDirectoryFilter()
 
-    # todo: create an instance of futil.FileSystemDataCrawler and pass the corresponding arguments
-    crawler_ = None  # todo: modify here
+    crawler_ = futil.FileSystemDataCrawler(data_dir, image_keys,MyFilePathGenerator(),dir_filter,'.nii.gz')
 
     return crawler_
 
 
 def load_images(image_paths):
+
     # todo: read the images (T1 as sitk.sitkFloat32, GroundTruth as sitk.sitkUInt8)
     image_dict = {
         structure.BrainImageTypes.T1w: None,  # todo: modify here
         structure.BrainImageTypes.GroundTruth: None  # todo: modify here
     }
 
+    for image_type, image_path in image_paths.items():
+        if image_type == structure.BrainImageTypes.T1w:
+            # Load T1 image as sitk.sitkFloat32
+            t1_image = sitk.ReadImage(image_path, sitk.sitkFloat32)
+            image_dict[structure.BrainImageTypes.T1w] = t1_image
+        elif image_type == structure.BrainImageTypes.GroundTruth:
+            # Load GroundTruth image as sitk.sitkUInt8
+            gt_image = sitk.ReadImage(image_path, sitk.sitkUInt8)
+            image_dict[structure.BrainImageTypes.GroundTruth] = gt_image
+        else:
+            raise ValueError('Unknown image type')
     return image_dict
 
 
@@ -54,13 +65,14 @@ def register_images(image_dict, atlas_img):
     registration = fltr_reg.MultiModalRegistration()
     registration_params = fltr_reg.MultiModalRegistrationParams(atlas_img)
     # todo execute the registration with the T1-weighted image and the registration parameters
-    registered_t1 = None  # todo: modify here
+    t1_img = image_dict[structure.BrainImageTypes.T1w]
+    registered_t1 = registration.execute(atlas_img, registration_params)
 
     gt_img = image_dict[structure.BrainImageTypes.GroundTruth]
+
     # todo: apply transform to GroundTruth image (gt_img) (hint: sitk.Resample, referenceImage=atlas_img,
     #  transform=registration.transform, interpolator=sitk.sitkNearestNeighbor
-    registered_gt = None  # todo: modify here
-
+    registered_gt= sitk.Resample(gt_img,referenceImage=atlas_img,transform=registration.transform,interpolator=sitk.sitkNearestNeighbor)
     return registered_t1, registered_gt
 
 
@@ -77,9 +89,12 @@ def preprocess_filter_rescale_t1(image_dict, new_min_val, new_max_val):
             return rescaled_img
 
     # todo: use the above filter and parameters to get the rescaled T1-weighted image
-    filter_ = None  # todo: modify here
-    filter_params = None  # todo: modify here
-    minmax_rescaled_img = None  # todo: modify here
+    filter_ = MinMaxRescaleFilter()  # todo: modify here
+    filter_params = MinMaxRescaleFilterParams(new_min_val, new_max_val)  # todo: modify here
+    # Get the T1-weighted image from image_dict
+    t1_img = image_dict[structure.BrainImageTypes.T1w]
+    # Apply the filter with the specified parameters to the T1-weighted image
+    minmax_rescaled_img = filter_.execute(t1_img, params=filter_params)
 
     return minmax_rescaled_img
 
@@ -91,8 +106,9 @@ def extract_feature_median_t1(image_dict):
             return med_img
 
     # todo: use the above filter class to get the median image feature of the T1-weighted image
-    filter_ = None  # todo: modify here
-    median_img = None  # todo: modify here
+    filter_ = MedianFilter()  # todo: modify here
+    t1_img = image_dict[structure.BrainImageTypes.T1w]
+    median_img = filter_.execute(t1_img)
 
     return median_img
 
